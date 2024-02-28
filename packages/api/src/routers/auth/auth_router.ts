@@ -22,7 +22,7 @@ import { LoginErrorCode, SignupErrorCode } from '../../generated/graphql'
 import { getRepository, setClaims } from '../../repository'
 import { userRepository } from '../../repository/user'
 import { isErrorWithCode } from '../../resolvers'
-import { createUser } from '../../services/create_user'
+// import { createUser } from '../../services/create_user'
 import {
   sendConfirmationEmail,
   sendPasswordResetEmail,
@@ -46,7 +46,7 @@ import {
   validateGoogleUser,
 } from './google_auth'
 import { createWebAuthToken } from './jwt_helpers'
-import { createMobileAccountCreationResponse } from './mobile/account_creation'
+// import { createMobileAccountCreationResponse } from './mobile/account_creation'
 
 export interface SignupRequest {
   email: string
@@ -116,30 +116,30 @@ export function authRouter() {
     '/create-account',
     cors<express.Request>({ ...corsConfig, maxAge: 600 })
   )
-  router.post(
-    '/create-account',
-    hourlyLimiter,
-    cors<express.Request>(corsConfig),
-    async (req, res) => {
-      const { name, bio, username } = req.body
+  // router.post(
+  //   '/create-account',
+  //   hourlyLimiter,
+  //   cors<express.Request>(corsConfig),
+  //   async (req, res) => {
+  //     const { name, bio, username } = req.body
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      const token = req.cookies?.pendingUserAuth as string | undefined
+  //     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+  //     const token = req.cookies?.pendingUserAuth as string | undefined
 
-      const payload = await createMobileAccountCreationResponse(token, {
-        name,
-        username,
-        bio,
-      })
+  //     const payload = await createMobileAccountCreationResponse(token, {
+  //       name,
+  //       username,
+  //       bio,
+  //     })
 
-      if (payload.json.authToken) {
-        res.cookie('auth', payload.json.authToken, cookieParams)
-        res.clearCookie('pendingUserAuth')
-      }
+  //     if (payload.json.authToken) {
+  //       res.cookie('auth', payload.json.authToken, cookieParams)
+  //       res.clearCookie('pendingUserAuth')
+  //     }
 
-      res.status(payload.statusCode).json({})
-    }
-  )
+  //     res.status(payload.statusCode).json({})
+  //   }
+  // )
 
   function curriedAuthHandler(
     provider: AuthProvider,
@@ -489,48 +489,48 @@ export function authRouter() {
     cors<express.Request>({ ...corsConfig, maxAge: 600 })
   )
 
-  router.post(
-    '/email-signup',
-    hourlyLimiter,
-    cors<express.Request>(corsConfig),
-    async (req: express.Request, res: express.Response) => {
-      if (!isValidSignupRequest(req.body)) {
-        return res.redirect(
-          `${env.client.url}/auth/email-signup?errorCodes=INVALID_CREDENTIALS`
-        )
-      }
-      const { email, password, name, username, bio, pictureUrl } = req.body
-      // trim whitespace in email address
-      const trimmedEmail = email.trim()
-      try {
-        // hash password
-        const hashedPassword = await hashPassword(password)
-        await createUser({
-          email: trimmedEmail,
-          provider: 'EMAIL',
-          sourceUserId: trimmedEmail,
-          name: name.trim(),
-          username: username.trim().toLowerCase(), // lowercase username
-          pictureUrl,
-          bio,
-          password: hashedPassword,
-          pendingConfirmation: true,
-        })
+  // router.post(
+  //   '/email-signup',
+  //   hourlyLimiter,
+  //   cors<express.Request>(corsConfig),
+  //   async (req: express.Request, res: express.Response) => {
+  //     if (!isValidSignupRequest(req.body)) {
+  //       return res.redirect(
+  //         `${env.client.url}/auth/email-signup?errorCodes=INVALID_CREDENTIALS`
+  //       )
+  //     }
+  //     const { email, password, name, username, bio, pictureUrl } = req.body
+  //     // trim whitespace in email address
+  //     const trimmedEmail = email.trim()
+  //     try {
+  //       // hash password
+  //       const hashedPassword = await hashPassword(password)
+  //       await createUser({
+  //         email: trimmedEmail,
+  //         provider: 'EMAIL',
+  //         sourceUserId: trimmedEmail,
+  //         name: name.trim(),
+  //         username: username.trim().toLowerCase(), // lowercase username
+  //         pictureUrl,
+  //         bio,
+  //         password: hashedPassword,
+  //         pendingConfirmation: true,
+  //       })
 
-        res.redirect(
-          `${env.client.url}/auth/verify-email?message=SIGNUP_SUCCESS`
-        )
-      } catch (e) {
-        logger.info('email-signup exception:', e)
-        if (isErrorWithCode(e)) {
-          return res.redirect(
-            `${env.client.url}/auth/email-signup?errorCodes=${e.errorCode}`
-          )
-        }
-        res.redirect(`${env.client.url}/auth/email-signup?errorCodes=UNKNOWN`)
-      }
-    }
-  )
+  //       res.redirect(
+  //         `${env.client.url}/auth/verify-email?message=SIGNUP_SUCCESS`
+  //       )
+  //     } catch (e) {
+  //       logger.info('email-signup exception:', e)
+  //       if (isErrorWithCode(e)) {
+  //         return res.redirect(
+  //           `${env.client.url}/auth/email-signup?errorCodes=${e.errorCode}`
+  //         )
+  //       }
+  //       res.redirect(`${env.client.url}/auth/email-signup?errorCodes=UNKNOWN`)
+  //     }
+  //   }
+  // )
 
   router.options(
     '/confirm-email',

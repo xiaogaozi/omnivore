@@ -6,11 +6,11 @@ import {
   createMobileSignInResponse,
   createMobileEmailSignInResponse,
 } from './sign_in'
-import {
-  createMobileSignUpResponse,
-  createMobileEmailSignUpResponse,
-} from './sign_up'
-import { createMobileAccountCreationResponse } from './account_creation'
+// import {
+//   createMobileSignUpResponse,
+//   createMobileEmailSignUpResponse,
+// } from './sign_up'
+// import { createMobileAccountCreationResponse } from './account_creation'
 import { env } from '../../../env'
 import { corsConfig } from '../../../utils/corsConfig'
 import cors from 'cors'
@@ -31,32 +31,32 @@ export function mobileAuthRouter() {
     res.status(payload.statusCode).json(payload.json)
   })
 
-  router.post('/email-sign-up', async (req, res) => {
-    const payload = await createMobileEmailSignUpResponse(req.body)
+  // router.post('/email-sign-up', async (req, res) => {
+  //   const payload = await createMobileEmailSignUpResponse(req.body)
 
-    res.status(payload.statusCode).json(payload.json)
-  })
+  //   res.status(payload.statusCode).json(payload.json)
+  // })
 
-  router.post('/sign-up', async (req, res) => {
-    const { token, provider, name, source } = req.body
-    const isAndroid = source === 'ANDROID'
-    const payload = await createMobileSignUpResponse(
-      isAndroid,
-      token,
-      provider,
-      name
-    )
-    res.status(payload.statusCode).json(payload.json)
-  })
+  // router.post('/sign-up', async (req, res) => {
+  //   const { token, provider, name, source } = req.body
+  //   const isAndroid = source === 'ANDROID'
+  //   const payload = await createMobileSignUpResponse(
+  //     isAndroid,
+  //     token,
+  //     provider,
+  //     name
+  //   )
+  //   res.status(payload.statusCode).json(payload.json)
+  // })
 
-  router.post('/create-account', async (req, res) => {
-    const { pendingUserToken, userProfile } = req.body
-    const payload = await createMobileAccountCreationResponse(
-      pendingUserToken,
-      userProfile
-    )
-    res.status(payload.statusCode).json(payload.json)
-  })
+  // router.post('/create-account', async (req, res) => {
+  //   const { pendingUserToken, userProfile } = req.body
+  //   const payload = await createMobileAccountCreationResponse(
+  //     pendingUserToken,
+  //     userProfile
+  //   )
+  //   res.status(payload.statusCode).json(payload.json)
+  // })
 
   // Required since this will be called from Android WebView
   router.options(

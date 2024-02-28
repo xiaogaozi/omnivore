@@ -40,7 +40,7 @@ import {
   UsersSuccess,
 } from '../../generated/graphql'
 import { userRepository } from '../../repository/user'
-import { createUser } from '../../services/create_user'
+// import { createUser } from '../../services/create_user'
 import { sendVerificationEmail } from '../../services/send_emails'
 import { softDeleteUser } from '../../services/user'
 import { userDataToUser } from '../../utils/helpers'
@@ -189,45 +189,45 @@ export const validateUsernameResolver: ResolverFn<
   return !user
 }
 
-export const googleSignupResolver: ResolverFn<
-  GoogleSignupResult,
-  Record<string, unknown>,
-  WithDataSourcesContext,
-  MutationGoogleSignupArgs
-> = async (_obj, { input }, { setAuth, log }) => {
-  const { email, username, name, bio, sourceUserId, pictureUrl, secret } = input
-  const lowerCasedUsername = username.toLowerCase()
+// export const googleSignupResolver: ResolverFn<
+//   GoogleSignupResult,
+//   Record<string, unknown>,
+//   WithDataSourcesContext,
+//   MutationGoogleSignupArgs
+// > = async (_obj, { input }, { setAuth, log }) => {
+//   const { email, username, name, bio, sourceUserId, pictureUrl, secret } = input
+//   const lowerCasedUsername = username.toLowerCase()
 
-  try {
-    jwt.verify(secret, env.server.jwtSecret)
-  } catch {
-    return { errorCodes: [SignupErrorCode.ExpiredToken] }
-  }
+//   try {
+//     jwt.verify(secret, env.server.jwtSecret)
+//   } catch {
+//     return { errorCodes: [SignupErrorCode.ExpiredToken] }
+//   }
 
-  try {
-    const [user, profile] = await createUser({
-      email,
-      sourceUserId,
-      provider: 'GOOGLE',
-      name,
-      username: lowerCasedUsername,
-      pictureUrl: pictureUrl,
-      bio: bio || undefined,
-      inviteCode: undefined,
-    })
+//   try {
+//     const [user, profile] = await createUser({
+//       email,
+//       sourceUserId,
+//       provider: 'GOOGLE',
+//       name,
+//       username: lowerCasedUsername,
+//       pictureUrl: pictureUrl,
+//       bio: bio || undefined,
+//       inviteCode: undefined,
+//     })
 
-    await setAuth({ uid: user.id })
-    return {
-      me: userDataToUser({ ...user, profile: { ...profile, private: false } }),
-    }
-  } catch (err) {
-    log.info('error signing up with google', err)
-    if (isErrorWithCode(err)) {
-      return { errorCodes: [err.errorCode as SignupErrorCode] }
-    }
-    return { errorCodes: [SignupErrorCode.Unknown] }
-  }
-}
+//     await setAuth({ uid: user.id })
+//     return {
+//       me: userDataToUser({ ...user, profile: { ...profile, private: false } }),
+//     }
+//   } catch (err) {
+//     log.info('error signing up with google', err)
+//     if (isErrorWithCode(err)) {
+//       return { errorCodes: [err.errorCode as SignupErrorCode] }
+//     }
+//     return { errorCodes: [SignupErrorCode.Unknown] }
+//   }
+// }
 
 export const logOutResolver: ResolverFn<
   LogOutResult,
