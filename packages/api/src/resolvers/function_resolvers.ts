@@ -76,7 +76,7 @@ import {
   getUserPersonalizationResolver,
   getUserResolver,
   googleLoginResolver,
-  googleSignupResolver,
+  // googleSignupResolver,
   groupsResolver,
   importFromIntegrationResolver,
   integrationsResolver,
@@ -225,7 +225,7 @@ const readingProgressHandlers = {
 export const functionResolvers = {
   Mutation: {
     googleLogin: googleLoginResolver,
-    googleSignup: googleSignupResolver,
+    // googleSignup: googleSignupResolver,
     logOut: logOutResolver,
     deleteAccount: deleteAccountResolver,
     saveArticleReadingProgress: saveArticleReadingProgressResolver,

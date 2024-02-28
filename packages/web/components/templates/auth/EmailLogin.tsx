@@ -110,24 +110,24 @@ export function EmailLogin(): JSX.Element {
             Login
           </Button>
         </HStack>
-        <StyledText
-          style="action"
-          css={{
+        {/* <StyledText
+            style="action"
+            css={{
             m: '0px',
             pt: '16px',
             width: '100%',
             color: '$omnivoreLightGray',
             textAlign: 'center',
             whiteSpace: 'normal',
-          }}
-        >
-          Don&apos;t have an account?{' '}
-          <Link href="/auth/email-signup" passHref legacyBehavior>
+            }}
+            >
+            Don&apos;t have an account?{' '}
+            <Link href="/auth/email-signup" passHref legacyBehavior>
             <StyledTextSpan style="actionLink" css={{ color: '$omnivoreGray' }}>
-              Sign up
+            Sign up
             </StyledTextSpan>
-          </Link>
-        </StyledText>
+            </Link>
+            </StyledText> */}
         <StyledText
           style="action"
           css={{

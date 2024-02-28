@@ -6,9 +6,9 @@ export default function EmailRegistrationPage(): JSX.Element {
   return (
     <>
       <PageMetaData title="Sign up with Email - Omnivore" path="/auth-signup" />
-      <ProfileLayout>
-        <EmailSignup />
-      </ProfileLayout>
+      {/* <ProfileLayout>
+          <EmailSignup />
+          </ProfileLayout> */}
       <div data-testid="auth-signup-page-tag" />
     </>
   )

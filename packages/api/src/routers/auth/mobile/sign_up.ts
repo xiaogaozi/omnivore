@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/restrict-template-expressions */
 import { userRepository } from '../../../repository/user'
-import { createUser } from '../../../services/create_user'
+// import { createUser } from '../../../services/create_user'
 import { hashPassword } from '../../../utils/auth'
 import { logger } from '../../../utils/logger'
 import { decodeAppleToken } from '../apple_auth'
@@ -14,70 +14,70 @@ import {
 import { decodeGoogleToken } from '../google_auth'
 import { createPendingUserToken, suggestedUsername } from '../jwt_helpers'
 
-export async function createMobileSignUpResponse(
-  isAndroid: boolean,
-  token?: string,
-  provider?: AuthProvider,
-  name?: string
-): Promise<JsonResponsePayload> {
-  try {
-    if (token && provider === 'GOOGLE') {
-      const decodedTokenResult = await decodeGoogleToken(token, isAndroid)
-      return createSignUpResponsePayload(
-        provider,
-        decodedTokenResult,
-        name ?? ''
-      )
-    }
+// export async function createMobileSignUpResponse(
+//   isAndroid: boolean,
+//   token?: string,
+//   provider?: AuthProvider,
+//   name?: string
+// ): Promise<JsonResponsePayload> {
+//   try {
+//     if (token && provider === 'GOOGLE') {
+//       const decodedTokenResult = await decodeGoogleToken(token, isAndroid)
+//       return createSignUpResponsePayload(
+//         provider,
+//         decodedTokenResult,
+//         name ?? ''
+//       )
+//     }
 
-    if (token && provider === 'APPLE') {
-      const decodedTokenResult = await decodeAppleToken(token)
-      return createSignUpResponsePayload(
-        provider,
-        decodedTokenResult,
-        name ?? ''
-      )
-    }
+//     if (token && provider === 'APPLE') {
+//       const decodedTokenResult = await decodeAppleToken(token)
+//       return createSignUpResponsePayload(
+//         provider,
+//         decodedTokenResult,
+//         name ?? ''
+//       )
+//     }
 
-    throw new Error(`Missing or unsupported provider ${provider}`)
-  } catch (e) {
-    logger.info('createMobileSignUpResponse error', e)
-    return signUpFailedPayload
-  }
-}
+//     throw new Error(`Missing or unsupported provider ${provider}`)
+//   } catch (e) {
+//     logger.info('createMobileSignUpResponse error', e)
+//     return signUpFailedPayload
+//   }
+// }
 
-export async function createMobileEmailSignUpResponse(
-  requestBody: any
-): Promise<JsonResponsePayload> {
-  try {
-    if (!isValidSignupRequest(requestBody)) {
-      throw new Error('Missing username, password, name, or username')
-    }
-    const { email, password, name, username } = requestBody
+// export async function createMobileEmailSignUpResponse(
+//   requestBody: any
+// ): Promise<JsonResponsePayload> {
+//   try {
+//     if (!isValidSignupRequest(requestBody)) {
+//       throw new Error('Missing username, password, name, or username')
+//     }
+//     const { email, password, name, username } = requestBody
 
-    // trim whitespace in email address
-    const trimmedEmail = email.trim()
-    const hashedPassword = await hashPassword(password)
+//     // trim whitespace in email address
+//     const trimmedEmail = email.trim()
+//     const hashedPassword = await hashPassword(password)
 
-    await createUser({
-      email: trimmedEmail,
-      provider: 'EMAIL',
-      sourceUserId: trimmedEmail,
-      name: name.trim(),
-      username: username.trim().toLowerCase(),
-      password: hashedPassword,
-      pendingConfirmation: true,
-    })
+//     await createUser({
+//       email: trimmedEmail,
+//       provider: 'EMAIL',
+//       sourceUserId: trimmedEmail,
+//       name: name.trim(),
+//       username: username.trim().toLowerCase(),
+//       password: hashedPassword,
+//       pendingConfirmation: true,
+//     })
 
-    return {
-      statusCode: 200,
-      json: {},
-    }
-  } catch (e) {
-    logger.info('error creating mobile email sign up response', e)
-    return signUpFailedPayload
-  }
-}
+//     return {
+//       statusCode: 200,
+//       json: {},
+//     }
+//   } catch (e) {
+//     logger.info('error creating mobile email sign up response', e)
+//     return signUpFailedPayload
+//   }
+// }
 
 const signUpFailedPayload = {
   statusCode: 403,
