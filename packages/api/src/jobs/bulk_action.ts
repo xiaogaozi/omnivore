@@ -23,11 +23,11 @@ export const bulkAction = async (data: BulkActionData) => {
     throw new Error('Queue not initialized')
   }
   const now = new Date().toISOString()
-  let offset = 0
 
-  do {
+  for (let offset = 0; offset < count; offset += batchSize) {
     const searchArgs = {
       size: batchSize,
+      includePending: true,
       query: `(${query}) AND updated:*..${now}`, // only process items that have not been updated
     }
 
@@ -36,9 +36,7 @@ export const bulkAction = async (data: BulkActionData) => {
     } catch (error) {
       logger.error('batch update error', error)
     }
-
-    offset += batchSize
-  } while (offset < count)
+  }
 
   return true
 }

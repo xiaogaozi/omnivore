@@ -27,8 +27,7 @@ public struct LinkedItemSyncResult {
               hasMore: Bool,
               mostRecentUpdatedAt: Date?,
               oldestUpdatedAt: Date?,
-              isEmpty: Bool)
-  {
+              isEmpty: Bool) {
     self.updatedItemIDs = updatedItemIDs
     self.cursor = cursor
     self.hasMore = hasMore
@@ -38,7 +37,41 @@ public struct LinkedItemSyncResult {
   }
 }
 
-public struct LinkedItemAudioProperties {
+public enum AudioItemType {
+  case digest
+  case libraryItem
+}
+
+public protocol AudioItemProperties {
+  var audioItemType: AudioItemType {
+    get
+  }
+  var itemID: String {
+    get
+  }
+  var title: String {
+    get
+  }
+  var byline: String? {
+    get
+  }
+  var imageURL: URL? {
+    get
+  }
+  var language: String? {
+    get
+  }
+  var startIndex: Int {
+    get
+  }
+  var startOffset: Double {
+    get
+  }
+}
+
+public struct LinkedItemAudioProperties: AudioItemProperties {
+  public let audioItemType = AudioItemType.libraryItem
+
   public let itemID: String
   public let objectID: NSManagedObjectID
   public let title: String
@@ -48,27 +81,6 @@ public struct LinkedItemAudioProperties {
   public let language: String?
   public let startIndex: Int
   public let startOffset: Double
-}
-
-// Internal model used for parsing a push notification object only
-public struct JSONArticle: Decodable {
-  public let id: String
-  public let title: String
-  public let createdAt: Date
-  public let updatedAt: Date
-  public let savedAt: Date
-  public let readAt: Date?
-  public let folder: String
-  public let image: String
-  public let readingProgressPercent: Double
-  public let readingProgressAnchorIndex: Int
-  public let slug: String
-  public let contentReader: String
-  public let url: String
-  public let isArchived: Bool
-  public let language: String?
-  public let wordsCount: Int?
-  public let downloadURL: String
 }
 
 public extension LibraryItem {

@@ -10,9 +10,15 @@ import Views
   @Published var errorMessage: String?
 
   func loadItem(dataService: DataService, username: String, requestID: String) async {
+    if let cached = Models.LibraryItem.lookup(byID: requestID, inContext: dataService.viewContext) {
+      item = cached
+      return
+    }
+
     guard let objectID = try? await dataService.loadItemContentUsingRequestID(username: username,
                                                                               requestID: requestID)
     else {
+      errorMessage = "Item is no longer available"
       return
     }
     item = dataService.viewContext.object(with: objectID) as? Models.LibraryItem
@@ -35,11 +41,11 @@ import Views
 public struct WebReaderLoadingContainer: View {
   let requestID: String
 
-  @Environment(\.dismiss) private var dismiss
   @EnvironmentObject var dataService: DataService
   @EnvironmentObject var audioController: AudioController
 
   @StateObject var viewModel = WebReaderLoadingContainerViewModel()
+  @Environment(\.presentationCoordinator) var presentationCoordinator
 
   public var body: some View {
     if let item = viewModel.item {
@@ -57,8 +63,6 @@ public struct WebReaderLoadingContainer: View {
             PDFWrapperView(pdfURL: pdfURL)
           }
         #endif
-      } else if item.state == "CONTENT_NOT_FETCHED" {
-        ProgressView()
       } else {
         WebReaderContainerView(item: item)
         #if os(iOS)
@@ -68,15 +72,23 @@ public struct WebReaderLoadingContainer: View {
           .onAppear { viewModel.trackReadEvent() }
       }
     } else if let errorMessage = viewModel.errorMessage {
-      Text(errorMessage)
+      NavigationView {
+        VStack(spacing: 15) {
+          Text(errorMessage)
+          Button(action: {
+            presentationCoordinator.dismiss()
+          }, label: {
+            Text("Dismiss")
+          })
+        }
+      }
+#if os(iOS)
+  .navigationViewStyle(.stack)
+#endif
     } else {
       ProgressView()
         .task {
-          if let username = dataService.currentViewer?.username {
-            await viewModel.loadItem(dataService: dataService, username: username, requestID: requestID)
-          } else {
-            viewModel.errorMessage = "You are not logged in."
-          }
+          await viewModel.loadItem(dataService: dataService, username: "me", requestID: requestID)
         }
     }
   }

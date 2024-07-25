@@ -8,7 +8,8 @@ export const saveReceivedEmail = async (
   text: string,
   html: string,
   userId: string,
-  type: 'article' | 'non-article' = 'non-article'
+  type: 'article' | 'non-article' = 'non-article',
+  replyTo?: string
 ): Promise<ReceivedEmail> => {
   return authTrx(
     (t) =>
@@ -20,9 +21,11 @@ export const saveReceivedEmail = async (
         html,
         type,
         user: { id: userId },
+        replyTo,
       }),
-    undefined,
-    userId
+    {
+      uid: userId,
+    }
   )
 }
 
@@ -36,16 +39,18 @@ export const updateReceivedEmail = async (
       t
         .getRepository(ReceivedEmail)
         .update({ id, user: { id: userId } }, { type }),
-    undefined,
-    userId
+    {
+      uid: userId,
+    }
   )
 }
 
 export const deleteReceivedEmail = async (id: string, userId: string) => {
   return authTrx(
     (t) => t.getRepository(ReceivedEmail).delete({ id, user: { id: userId } }),
-    undefined,
-    userId
+    {
+      uid: userId,
+    }
   )
 }
 
@@ -53,7 +58,9 @@ export const findReceivedEmailById = async (id: string, userId: string) => {
   return authTrx(
     (t) =>
       t.getRepository(ReceivedEmail).findOneBy({ id, user: { id: userId } }),
-    undefined,
-    userId
+    {
+      uid: userId,
+      replicationMode: 'replica',
+    }
   )
 }

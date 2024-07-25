@@ -11,6 +11,7 @@ struct WebReader: PlatformViewRepresentable {
   let articleContent: ArticleContent
   let openLinkAction: (URL) -> Void
   let tapHandler: () -> Void
+  let explainHandler: ((String) -> Void)?
   let scrollPercentHandler: (Int) -> Void
   let webViewActionHandler: (WKScriptMessage, WKScriptMessageReplyHandler?) -> Void
   let navBarVisibilityUpdater: (Bool) -> Void
@@ -51,6 +52,7 @@ struct WebReader: PlatformViewRepresentable {
     let contentController = WKUserContentController()
 
     webView.tapHandler = tapHandler
+    webView.explainHandler = explainHandler
     webView.navigationDelegate = context.coordinator
     webView.configuration.userContentController = contentController
     webView.configuration.userContentController.removeAllScriptMessageHandlers()
@@ -65,6 +67,10 @@ struct WebReader: PlatformViewRepresentable {
       webView.scrollView.contentInset.top = readerViewNavBarHeight
       webView.scrollView.verticalScrollIndicatorInsets.top = readerViewNavBarHeight
       webView.configuration.userContentController.add(webView, name: "viewerAction")
+
+      if #available(iOS 15.4, *) {
+        webView.configuration.preferences.isElementFullscreenEnabled = true
+      }
 
       webView.scrollView.indicatorStyle = ThemeManager.currentTheme.isDark ?
         UIScrollView.IndicatorStyle.white :

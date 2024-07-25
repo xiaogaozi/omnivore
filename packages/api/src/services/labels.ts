@@ -2,62 +2,87 @@ import { DeepPartial, FindOptionsWhere, In } from 'typeorm'
 import { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity'
 import { EntityLabel, LabelSource } from '../entity/entity_label'
 import { Label } from '../entity/label'
-import { createPubSubClient, EntityType, PubsubClient } from '../pubsub'
+import {
+  createPubSubClient,
+  EntityEvent,
+  EntityType,
+  PubsubClient,
+} from '../pubsub'
 import { authTrx } from '../repository'
 import { CreateLabelInput, labelRepository } from '../repository/label'
+import { Merge } from '../util'
 import { bulkEnqueueUpdateLabels } from '../utils/createTask'
-import { logger } from '../utils/logger'
-import { findHighlightById } from './highlights'
-import { findLibraryItemIdsByLabelId } from './library_item'
+import { deepDelete } from '../utils/helpers'
+import { findLibraryItemIdsByLabelId, ItemEvent } from './library_item'
 
-type AddLabelsToLibraryItemEvent = {
-  libraryItemId: string
-  pageId: string
-  labels: DeepPartial<Label>[]
-  source?: LabelSource
+const columnsToDelete = ['description', 'createdAt'] as const
+type ColumnsToDeleteType = typeof columnsToDelete[number]
+export type LabelEvent = Merge<
+  Omit<DeepPartial<Label>, ColumnsToDeleteType>,
+  EntityEvent
+>
+
+export const batchGetLabelsFromLibraryItemIds = async (
+  libraryItemIds: readonly string[]
+): Promise<Label[][]> => {
+  const labels = await authTrx(
+    async (tx) =>
+      tx.getRepository(EntityLabel).find({
+        where: { libraryItemId: In(libraryItemIds as string[]) },
+        relations: ['label'],
+      }),
+    {
+      replicationMode: 'replica',
+    }
+  )
+
+  return libraryItemIds.map((libraryItemId) =>
+    labels
+      .filter((label) => label.libraryItemId === libraryItemId)
+      .map((label) => label.label)
+  )
 }
-type AddLabelsToHighlightEvent = {
-  libraryItemId: string
-  highlightId: string
-  labels: DeepPartial<Label>[]
+
+export const batchGetLabelsFromHighlightIds = async (
+  highlightIds: readonly string[]
+): Promise<Label[][]> => {
+  const labels = await authTrx(
+    async (tx) =>
+      tx.getRepository(EntityLabel).find({
+        where: { highlightId: In(highlightIds as string[]) },
+        relations: ['label'],
+      }),
+    {
+      replicationMode: 'replica',
+    }
+  )
+
+  return highlightIds.map((highlightId) =>
+    labels
+      .filter((label) => label.highlightId === highlightId)
+      .map((label) => label.label)
+  )
 }
-
-// const batchGetLabelsFromLinkIds = async (
-//   linkIds: readonly string[]
-// ): Promise<Label[][]> => {
-//   const links = await getRepository(Link).find({
-//     where: { id: In(linkIds as string[]) },
-//     relations: ['labels'],
-//   })
-
-//   return linkIds.map(
-//     (linkId) => links.find((link) => link.id === linkId)?.labels || []
-//   )
-// }
-
-// export const labelsLoader = new DataLoader(batchGetLabelsFromLinkIds)
 
 export const findOrCreateLabels = async (
   labels: CreateLabelInput[],
   userId: string
 ): Promise<Label[]> => {
-  // create labels if not exist
-  await authTrx(
-    async (tx) =>
-      tx.withRepository(labelRepository).createLabels(labels, userId),
-    undefined,
-    userId
-  )
-
-  // find labels
   return authTrx(
-    async (tx) =>
-      tx.withRepository(labelRepository).findByNames(
-        labels.map((l) => l.name),
-        userId
-      ),
-    undefined,
-    userId
+    async (tx) => {
+      const repo = tx.withRepository(labelRepository)
+      // create labels if not exist
+      await repo.createLabels(labels, userId)
+
+      // find labels by names
+      return repo.findBy({
+        name: In(labels.map((l) => l.name)),
+        user: { id: userId },
+      })
+    },
+    {
+      uid: userId,
+    }
   )
 }
 
@@ -140,15 +165,20 @@ export const saveLabelsInLibraryItem = async (
         }))
       )
     },
-    undefined,
-    userId
+    {
+      uid: userId,
+    }
   )
 
   if (source === 'user') {
     // create pubsub event
-    await pubsub.entityCreated<AddLabelsToLibraryItemEvent>(
+    await pubsub.entityCreated<ItemEvent>(
       EntityType.LABEL,
-      { pageId: libraryItemId, labels, source, libraryItemId },
+      {
+        id: libraryItemId,
+        labels: labels.map((l) => deepDelete(l, columnsToDelete)),
+        labelNames: labels.map((l) => l.name),
+      },
       userId
     )
   }
@@ -165,20 +195,33 @@ export const addLabelsToLibraryItem = async (
 ) => {
   await authTrx(
     async (tx) => {
+      // assign new labels if not exist to the item owner by user
       await tx.query(
         `INSERT INTO omnivore.entity_labels (label_id, library_item_id, source)
-          SELECT id, $1, $2 FROM omnivore.labels
-          WHERE id = ANY($3)
-          AND NOT EXISTS (
-            SELECT 1 FROM omnivore.entity_labels
-            WHERE label_id = labels.id
-            AND library_item_id = $1
-          )`,
+          SELECT 
+              lbl.id, 
+              $1, 
+              $2 
+          FROM 
+              omnivore.labels lbl
+          LEFT JOIN 
+              omnivore.entity_labels el 
+          ON 
+              el.label_id = lbl.id 
+              AND el.library_item_id = $1
+          INNER JOIN 
+              omnivore.library_item li 
+          ON 
+              li.id = $1
+          WHERE 
+              lbl.id = ANY($3)
+              AND el.label_id IS NULL;`,
         [libraryItemId, source, labelIds]
       )
     },
-    undefined,
-    userId
+    {
+      uid: userId,
+    }
   )
 
   // update labels in library item
@@ -187,9 +230,7 @@ export const addLabelsToLibraryItem = async (
 
 export const saveLabelsInHighlight = async (
   labels: Label[],
-  highlightId: string,
-  userId: string,
-  pubsub = createPubSubClient()
+  highlightId: string
 ) => {
   await authTrx(async (tx) => {
     const repo = tx.getRepository(EntityLabel)
@@ -207,23 +248,6 @@ export const saveLabelsInHighlight = async (
       }))
     )
   })
-
-  const highlight = await findHighlightById(highlightId, userId)
-  if (!highlight) {
-    logger.error('Highlight not found', { highlightId, userId })
-    return
-  }
-
-  const libraryItemId = highlight.libraryItemId
-  // create pubsub event
-  await pubsub.entityCreated<AddLabelsToHighlightEvent>(
-    EntityType.LABEL,
-    { highlightId, labels, libraryItemId },
-    userId
-  )
-
-  // update labels in library item
-  await bulkEnqueueUpdateLabels([{ libraryItemId, userId }])
 }
 
 export const findLabelsByIds = async (
@@ -237,8 +261,10 @@ export const findLabelsByIds = async (
         user: { id: userId },
       })
     },
-    undefined,
-    userId
+    {
+      uid: userId,
+      replicationMode: 'replica',
+    }
   )
 }
 
@@ -250,8 +276,9 @@ export const createLabel = async (
   return authTrx(
     (t) =>
       t.withRepository(labelRepository).createLabel({ name, color }, userId),
-    undefined,
-    userId
+    {
+      uid: userId,
+    }
   )
 }
 
@@ -261,8 +288,9 @@ export const deleteLabels = async (
 ) => {
   return authTrx(
     async (t) => t.withRepository(labelRepository).delete(criteria),
-    undefined,
-    userId
+    {
+      uid: userId,
+    }
   )
 }
 
@@ -298,8 +326,9 @@ export const updateLabel = async (
 
       return repo.findOneByOrFail({ id })
     },
-    undefined,
-    userId
+    {
+      uid: userId,
+    }
   )
 
   const libraryItemIds = await findLibraryItemIdsByLabelId(id, userId)
@@ -320,8 +349,10 @@ export const findLabelsByUserId = async (userId: string): Promise<Label[]> => {
         where: { user: { id: userId } },
         order: { position: 'ASC' },
       }),
-    undefined,
-    userId
+    {
+      uid: userId,
+      replicationMode: 'replica',
+    }
   )
 }
 
@@ -331,8 +362,10 @@ export const findLabelById = async (id: string, userId: string) => {
       tx
         .withRepository(labelRepository)
         .findOneBy({ id, user: { id: userId } }),
-    undefined,
-    userId
+    {
+      uid: userId,
+      replicationMode: 'replica',
+    }
   )
 }
 
@@ -352,7 +385,8 @@ export const findLabelsByLibraryItemId = async (
         source: el.source,
       }))
     },
-    undefined,
-    userId
+    {
+      uid: userId,
+    }
   )
 }

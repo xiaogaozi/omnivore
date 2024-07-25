@@ -82,8 +82,9 @@ export function pageRouter() {
           status: UploadFileStatus.Initialized,
           contentType: 'application/pdf',
         }),
-      undefined,
-      claims.uid
+      {
+        uid: claims.uid,
+      }
     )
 
     const uploadFilePathName = generateUploadFilePathName(
@@ -146,7 +147,11 @@ export function pageRouter() {
         return res.status(400).send({ errorCode: 'BAD_DATA' })
       }
 
-      const item = await findLibraryItemById(itemId, claims.uid)
+      const item = await findLibraryItemById(itemId, claims.uid, {
+        relations: {
+          highlights: true,
+        },
+      })
       if (!item) {
         return res.status(404).send({ errorCode: 'NOT_FOUND' })
       }

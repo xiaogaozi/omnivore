@@ -1,7 +1,11 @@
 import { Readability } from '@omnivore/readability'
 import { DeepPartial } from 'typeorm'
 import { Highlight } from '../entity/highlight'
-import { LibraryItem, LibraryItemState } from '../entity/library_item'
+import {
+  DirectionalityType,
+  LibraryItem,
+  LibraryItemState,
+} from '../entity/library_item'
 import { User } from '../entity/user'
 import { homePageURL } from '../env'
 import {
@@ -12,7 +16,6 @@ import {
   SaveResult,
 } from '../generated/graphql'
 import { Merge } from '../util'
-import { enqueueThumbnailJob } from '../utils/createTask'
 import {
   cleanUrl,
   generateSlug,
@@ -64,7 +67,12 @@ const shouldParseInBackend = (input: SavePageInput): boolean => {
 
 export type SavePageArgs = Merge<
   SavePageInput,
-  { feedContent?: string; previewImage?: string; author?: string }
+  {
+    feedContent?: string
+    previewImage?: string
+    author?: string
+    originalContentUploaded?: boolean
+  }
 >
 
 export const savePage = async (
@@ -99,7 +107,7 @@ export const savePage = async (
     }
   }
 
-  const parseResult = await parsePreparedContent(input.url, {
+  const preparedDocument: PreparedDocumentInput = {
     document: input.originalContent,
     pageInfo: {
       title: input.title,
@@ -107,7 +115,9 @@ export const savePage = async (
       previewImage: input.previewImage,
       author: input.author,
     },
-  })
+  }
+
+  const parseResult = await parsePreparedContent(input.url, preparedDocument)
 
   const itemToSave = parsedContentToLibraryItem({
     itemId: clientRequestId,
@@ -126,6 +136,10 @@ export const savePage = async (
     rssFeedUrl: input.rssFeedUrl,
     folder: input.folder,
     feedContent: input.feedContent,
+    dir: parseResult.parsedContent?.dir,
+    preparedDocument,
+    labelNames: input.labels?.map((label) => label.name),
+    highlightAnnotations: parseResult.highlightData ? [''] : undefined,
   })
   const isImported =
     input.source === 'csv-importer' || input.source === 'pocket'
@@ -135,7 +149,8 @@ export const savePage = async (
     itemToSave,
     user.id,
     undefined,
-    isImported
+    isImported,
+    input.originalContentUploaded
   )
   clientRequestId = newItem.id
 
@@ -146,17 +161,6 @@ export const savePage = async (
     input.labels,
     input.rssFeedUrl
   )
-
-  // we don't want to create thumbnail for imported pages and pages that already have thumbnail
-  if (!isImported && !parseResult.parsedContent?.previewImage) {
-    try {
-      // create a task to update thumbnail and pre-cache all images
-      const job = await enqueueThumbnailJob(user.id, clientRequestId)
-      logger.info('Created thumbnail job', { job })
-    } catch (e) {
-      logger.error('Failed to enqueue thumbnail job', e)
-    }
-  }
 
   if (parseResult.highlightData) {
     const highlight: DeepPartial<Highlight> = {
@@ -204,6 +208,9 @@ export const parsedContentToLibraryItem = ({
   rssFeedUrl,
   folder,
   feedContent,
+  dir,
+  labelNames,
+  highlightAnnotations,
 }: {
   url: string
   userId: string
@@ -224,6 +231,9 @@ export const parsedContentToLibraryItem = ({
   rssFeedUrl?: string | null
   folder?: string | null
   feedContent?: string | null
+  dir?: string | null
+  labelNames?: string[]
+  highlightAnnotations?: string[]
 }): DeepPartial<LibraryItem> & { originalUrl: string } => {
   logger.info('save_page', { url, state, itemId })
   return {
@@ -233,6 +243,7 @@ export const parsedContentToLibraryItem = ({
     originalContent: originalHtml,
     readableContent: parsedContent?.content || '',
     description: parsedContent?.excerpt,
+    previewContent: parsedContent?.excerpt,
     title:
       title ||
       parsedContent?.title ||
@@ -240,12 +251,15 @@ export const parsedContentToLibraryItem = ({
       croppedPathname ||
       parsedContent?.siteName ||
       url,
-    author: parsedContent?.byline,
+    author: preparedDocument?.pageInfo.author || parsedContent?.byline,
     originalUrl: cleanUrl(canonicalUrl || url),
     itemType,
     textContentHash:
       uploadFileHash || stringToHash(parsedContent?.content || url),
-    thumbnail: parsedContent?.previewImage ?? undefined,
+    thumbnail:
+      (preparedDocument?.pageInfo.previewImage ||
+        parsedContent?.previewImage) ??
+      undefined,
     publishedAt: validatedDate(
       publishedAt || parsedContent?.publishedDate || undefined
     ),
@@ -255,11 +269,13 @@ export const parsedContentToLibraryItem = ({
     state: state
       ? (state as unknown as LibraryItemState)
       : LibraryItemState.Succeeded,
-    savedAt: validatedDate(savedAt),
+    savedAt: validatedDate(savedAt) || new Date(),
     siteName: parsedContent?.siteName,
     itemLanguage: parsedContent?.language,
     siteIcon: parsedContent?.siteIcon,
-    wordCount: wordsCount(parsedContent?.textContent || ''),
+    wordCount: parsedContent?.textContent
+      ? wordsCount(parsedContent.textContent)
+      : wordsCount(parsedContent?.content || '', true),
     contentReader: contentReaderForLibraryItem(itemType, uploadFileId),
     subscription: rssFeedUrl,
     folder: folder || 'inbox',
@@ -267,5 +283,11 @@ export const parsedContentToLibraryItem = ({
       state === ArticleSavingRequestStatus.Archived ? new Date() : null,
     deletedAt: state === ArticleSavingRequestStatus.Deleted ? new Date() : null,
     feedContent,
+    directionality:
+      dir?.toLowerCase() === 'rtl'
+        ? DirectionalityType.RTL
+        : DirectionalityType.LTR, // default to LTR
+    labelNames,
+    highlightAnnotations,
   }
 }

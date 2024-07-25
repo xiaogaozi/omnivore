@@ -36,6 +36,9 @@ export class Highlight {
   @JoinColumn({ name: 'user_id' })
   user!: User
 
+  @Column('uuid')
+  userId!: string
+
   @ManyToOne(() => LibraryItem, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'library_item_id' })
   libraryItem!: LibraryItem
@@ -62,7 +65,7 @@ export class Highlight {
   createdAt!: Date
 
   @UpdateDateColumn()
-  updatedAt?: Date | null
+  updatedAt!: Date
 
   @Column('timestamp')
   sharedAt?: Date

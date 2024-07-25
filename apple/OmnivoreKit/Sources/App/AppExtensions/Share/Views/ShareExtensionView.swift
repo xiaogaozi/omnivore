@@ -323,7 +323,7 @@ public struct ShareExtensionView: View {
         #endif
         Spacer()
         Button(action: {
-          extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
+          viewModel.dismissExtension(extensionContext: extensionContext)
         }, label: {
           Text("Dismiss")
           #if os(iOS)
@@ -396,7 +396,7 @@ public struct ShareExtensionView: View {
           .frame(maxWidth: .infinity)
           .font(Font.system(size: 14))
           .accentColor(.blue)
-        #if os(macos)
+        #if os(macOS)
           .introspectTextView { textView in
             textView.textContainerInset = NSSize(width: 10, height: 10)
           }

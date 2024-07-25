@@ -30,6 +30,9 @@ export class Integration {
   @JoinColumn({ name: 'user_id' })
   user!: User
 
+  @Column('uuid', { name: 'user_id' })
+  userId!: string
+
   @Column('varchar', { length: 40 })
   name!: string
 
@@ -59,4 +62,7 @@ export class Integration {
 
   @Column('enum', { enum: ImportItemState, nullable: true })
   importItemState?: ImportItemState | null
+
+  @Column('jsonb', { nullable: true })
+  settings?: any
 }

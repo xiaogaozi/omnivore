@@ -4,23 +4,25 @@
 /* eslint-disable @typescript-eslint/no-misused-promises */
 import * as lw from '@google-cloud/logging-winston'
 import * as Sentry from '@sentry/node'
-import { ApolloServer } from 'apollo-server-express'
 import { json, urlencoded } from 'body-parser'
 import cookieParser from 'cookie-parser'
 import express, { Express } from 'express'
 import * as httpContext from 'express-http-context2'
 import promBundle from 'express-prom-bundle'
-import rateLimit from 'express-rate-limit'
-import { createServer, Server } from 'http'
+import { createServer } from 'http'
 import * as prom from 'prom-client'
 import { config, loggers } from 'winston'
 import { makeApolloServer } from './apollo'
 import { appDataSource } from './data_source'
 import { env } from './env'
 import { redisDataSource } from './redis_data_source'
+import { aiSummariesRouter } from './routers/ai_summary_router'
 import { articleRouter } from './routers/article_router'
 import { authRouter } from './routers/auth/auth_router'
 import { mobileAuthRouter } from './routers/auth/mobile/mobile_auth_router'
+import { contentRouter } from './routers/content_router'
+import { digestRouter } from './routers/digest_router'
+import { explainRouter } from './routers/explain_router'
 import { integrationRouter } from './routers/integration_router'
 import { localDebugRouter } from './routers/local_debug_router'
 import { notificationRouter } from './routers/notification_router'
@@ -29,7 +31,6 @@ import { contentServiceRouter } from './routers/svc/content'
 import { emailsServiceRouter } from './routers/svc/emails'
 import { emailAttachmentRouter } from './routers/svc/email_attachment'
 import { followingServiceRouter } from './routers/svc/following'
-import { integrationsServiceRouter } from './routers/svc/integrations'
 import { linkServiceRouter } from './routers/svc/links'
 import { newsletterServiceRouter } from './routers/svc/newsletters'
 // import { remindersServiceRouter } from './routers/svc/reminders'
@@ -37,25 +38,20 @@ import { rssFeedRouter } from './routers/svc/rss_feed'
 import { uploadServiceRouter } from './routers/svc/upload'
 import { userServiceRouter } from './routers/svc/user'
 import { webhooksServiceRouter } from './routers/svc/webhooks'
+import { taskRouter } from './routers/task_router'
 import { textToSpeechRouter } from './routers/text_to_speech'
 import { userRouter } from './routers/user_router'
 import { sentryConfig } from './sentry'
 import { analytics } from './utils/analytics'
-import {
-  getClaimsByToken,
-  getTokenByRequest,
-  isSystemRequest,
-} from './utils/auth'
 import { corsConfig } from './utils/corsConfig'
-import { buildLogger, buildLoggerTransport } from './utils/logger'
+import { getClientFromUserAgent } from './utils/helpers'
+import { buildLogger, buildLoggerTransport, logger } from './utils/logger'
+import { apiHourLimiter, apiLimiter, authLimiter } from './utils/rate_limit'
+import { shortcutsRouter } from './routers/shortcuts_router'
 
 const PORT = process.env.PORT || 4000
 
-export const createApp = (): {
-  app: Express
-  apollo: ApolloServer
-  httpServer: Server
-} => {
+export const createApp = (): Express => {
   const app = express()
 
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -71,66 +67,52 @@ export const createApp = (): {
   // set to true if behind a reverse proxy/load balancer
   app.set('trust proxy', env.server.trustProxy)
 
-  const apiLimiter = rateLimit({
-    windowMs: 60 * 1000, // 1 minute
-    max: async (req) => {
-      // 100 RPM for an authenticated request, 15 for a non-authenticated request
-      const token = getTokenByRequest(req)
-      try {
-        const claims = await getClaimsByToken(token)
-        return claims ? 60 : 15
-      } catch (e) {
-        console.log('non-authenticated request')
-        return 15
-      }
-    },
-    keyGenerator: (req) => {
-      return getTokenByRequest(req) || req.ip
-    },
-    // skip preflight requests and test requests and system requests
-    skip: (req) =>
-      req.method === 'OPTIONS' || env.dev.isLocal || isSystemRequest(req),
-  })
-
   // Apply the rate limiting middleware to API calls only
-  app.use('/api/', apiLimiter)
+  app.use('/api/', apiLimiter, apiHourLimiter)
 
   // set client info in the request context
   app.use(httpContext.middleware)
   app.use('/api/', (req, res, next) => {
+    // get client info from user agent
+    const userAgent = req.header('User-Agent')
+    if (userAgent) {
+      const client = getClientFromUserAgent(userAgent)
+      httpContext.set('client', client)
+    }
+
+    // get client info from header
     const client = req.header('X-OmnivoreClient')
     if (client) {
       httpContext.set('client', client)
     }
+
     next()
   })
 
   // respond healthy to auto-scaler.
   app.get('/_ah/health', (req, res) => res.sendStatus(200))
 
-  // 5 RPM for auth requests
-  const authLimiter = rateLimit({
-    windowMs: 60 * 1000, // 1 minute
-    max: 5,
-    // skip preflight requests and test requests
-    skip: (req) => req.method === 'OPTIONS' || env.dev.isLocal,
-  })
-
   app.use('/api/auth', authLimiter, authRouter())
   app.use('/api/mobile-auth', authLimiter, mobileAuthRouter())
   app.use('/api/page', pageRouter())
   app.use('/api/user', userRouter())
+  app.use('/api/shortcuts', shortcutsRouter())
   app.use('/api/article', articleRouter())
+  app.use('/api/ai-summary', aiSummariesRouter())
+  app.use('/api/explain', explainRouter())
   app.use('/api/text-to-speech', textToSpeechRouter())
   app.use('/api/notification', notificationRouter())
   app.use('/api/integration', integrationRouter())
+  app.use('/api/tasks', taskRouter())
+  app.use('/api/digest', digestRouter())
+  app.use('/api/content', contentRouter())
+
   app.use('/svc/pubsub/content', contentServiceRouter())
   app.use('/svc/pubsub/links', linkServiceRouter())
   app.use('/svc/pubsub/newsletters', newsletterServiceRouter())
   app.use('/svc/pubsub/emails', emailsServiceRouter())
   app.use('/svc/pubsub/upload', uploadServiceRouter())
   app.use('/svc/pubsub/webhooks', webhooksServiceRouter())
-  app.use('/svc/pubsub/integrations', integrationsServiceRouter())
   app.use('/svc/pubsub/rss-feed', rssFeedRouter())
   app.use('/svc/pubsub/user', userServiceRouter())
   // app.use('/svc/reminders', remindersServiceRouter())
@@ -168,10 +150,7 @@ export const createApp = (): {
     res.end(await prom.register.metrics())
   })
 
-  const apollo = makeApolloServer(app)
-  const httpServer = createServer(app)
-
-  return { app, apollo, httpServer }
+  return app
 }
 
 const main = async (): Promise<void> => {
@@ -186,8 +165,9 @@ const main = async (): Promise<void> => {
     await redisDataSource.initialize()
   }
 
-  const { app, apollo, httpServer } = createApp()
-
+  const app = createApp()
+  const httpServer = createServer(app)
+  const apollo = makeApolloServer(app, httpServer)
   await apollo.start()
   apollo.applyMiddleware({ app, path: '/api/graphql', cors: corsConfig })
 
@@ -213,24 +193,12 @@ const main = async (): Promise<void> => {
   listener.timeout = 640 * 1000 // match headersTimeout
 
   const gracefulShutdown = async (signal: string) => {
-    console.log('[posthog]: flushing events')
-    await analytics.shutdownAsync()
-    console.log('[posthog]: events flushed')
-
     console.log(`[api]: Received ${signal}, closing server...`)
-
     await apollo.stop()
-    console.log('[api]: Apollo server stopped')
+    console.log('[api]: Express server stopped')
 
-    await new Promise<void>((resolve) => {
-      listener.close((err) => {
-        console.log('[api]: Express listener closed')
-        if (err) {
-          console.log('[api]: error stopping listener', { err })
-        }
-        resolve()
-      })
-    })
+    await analytics.shutdownAsync()
+    console.log('[api]: Posthog events flushed')
 
     // Shutdown redis before DB because the quit sequence can
     // cause appDataSource to get reloaded in the callback
@@ -245,6 +213,16 @@ const main = async (): Promise<void> => {
 
   process.on('SIGINT', () => gracefulShutdown('SIGINT'))
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
+
+  process.on('uncaughtException', function (err) {
+    // Handle the error safely
+    logger.error('Uncaught exception', err)
+  })
+
+  process.on('unhandledRejection', (reason, promise) => {
+    // Handle the error safely
+    logger.error('Unhandled Rejection at: Promise', { promise, reason })
+  })
 }
 
 // only call main if the file was called from the CLI and wasn't required from another module

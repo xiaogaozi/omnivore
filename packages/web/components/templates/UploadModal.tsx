@@ -1,7 +1,7 @@
 import * as Progress from '@radix-ui/react-progress'
 import { styled } from '@stitches/react'
 import axios from 'axios'
-import { File } from 'phosphor-react'
+import { File } from '@phosphor-icons/react'
 import { useCallback, useRef, useState } from 'react'
 import Dropzone, { DropEvent, DropzoneRef, FileRejection } from 'react-dropzone'
 import { v4 as uuidv4 } from 'uuid'
@@ -284,9 +284,8 @@ export function UploadModal(props: UploadModalProps): JSX.Element {
           minWidth: '650px',
           minHeight: '430px',
         }}
-        onInteractOutside={() => {
-          // remove focus from modal
-          ;(document.activeElement as HTMLElement).blur()
+        onInteractOutside={(event) => {
+          event.preventDefault()
         }}
       >
         <VStack distribution="start">

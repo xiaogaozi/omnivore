@@ -7,7 +7,7 @@ import {
   State,
 } from '../fragments/articleFragment'
 import { Highlight, highlightFragment } from '../fragments/highlightFragment'
-import { ScopedMutator } from 'swr/dist/types'
+import { ScopedMutator } from 'swr/dist/_internal'
 import { Label, labelFragment } from '../fragments/labelFragment'
 import {
   LibraryItems,
@@ -39,6 +39,8 @@ type NestedArticleData = {
   errorCodes?: string[]
 }
 
+export type TextDirection = 'RTL' | 'LTR'
+
 export type ArticleAttributes = {
   id: string
   title: string
@@ -64,6 +66,7 @@ export type ArticleAttributes = {
   linkId: string
   labels?: Label[]
   state?: State
+  directionality?: TextDirection
   recommendations?: Recommendation[]
 }
 
@@ -113,7 +116,8 @@ export function useGetArticleQuery({
 
   const { data, error, mutate } = useSWR(
     slug ? [query, username, slug, includeFriendsHighlights] : null,
-    makeGqlFetcher(variables)
+    makeGqlFetcher(query, variables),
+    {}
   )
 
   let resultData: ArticleData | undefined = data as ArticleData

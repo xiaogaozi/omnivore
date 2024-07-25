@@ -9,6 +9,7 @@ enum FlairLabels: String {
   case newsletter
   case rss
   case feed
+  case digest
 
   var icon: Image {
     switch self {
@@ -17,6 +18,7 @@ enum FlairLabels: String {
     case .recommended: return Image.flairRecommended
     case .newsletter: return Image.flairNewsletter
     case .feed, .rss: return Image.flairFeed
+    case .digest: return Image.flairDigest
     }
   }
 
@@ -27,16 +29,17 @@ enum FlairLabels: String {
     case .newsletter: return 2
     case .recommended: return 3
     case .pinned: return 4
+    case .digest: return 5
     }
   }
 }
 
 public extension View {
-  func draggableItem(item: LibraryItemData) -> some View {
+  func draggableItem(item: Models.LibraryItem) -> some View {
     #if os(iOS)
       if #available(iOS 16.0, *), let url = item.deepLink {
         return AnyView(self.draggable(url) {
-          Label(item.title, systemImage: "link")
+          Label(item.title ?? "", systemImage: "link")
         })
       }
     #endif
@@ -44,77 +47,33 @@ public extension View {
   }
 }
 
-public struct LibraryItemData {
-  public var id: String
-  public let title: String
-  public let pageURLString: String
-  public var isArchived: Bool
-  public let author: String?
-  public let deepLink: URL?
-  public let hasLabels: Bool
-  public let noteText: String?
-  public let readingProgress: Double
-  public let wordsCount: Int64
-  public let isPDF: Bool
-  public let highlights: NSSet?
-  public let sortedLabels: [LinkedItemLabel]
-  public let imageURL: URL?
-  public let publisherDisplayName: String?
-  public let descriptionText: String?
-
-  public init(id: String, title: String, pageURLString: String, isArchived: Bool, author: String?,
-              deepLink: URL?, hasLabels: Bool, noteText: String?,
-              readingProgress: Double, wordsCount: Int64, isPDF: Bool, highlights: NSSet?,
-              sortedLabels: [LinkedItemLabel], imageURL: URL?, publisherDisplayName: String?, descriptionText: String?)
-  {
-    self.id = id
-    self.title = title
-    self.pageURLString = pageURLString
-    self.isArchived = isArchived
-    self.author = author
-    self.deepLink = deepLink
-    self.hasLabels = hasLabels
-    self.noteText = noteText
-    self.readingProgress = readingProgress
-    self.wordsCount = wordsCount
-    self.isPDF = isPDF
-    self.highlights = highlights
-    self.sortedLabels = sortedLabels
-    self.imageURL = imageURL
-    self.publisherDisplayName = publisherDisplayName
-    self.descriptionText = descriptionText
+func savedDateString(_ savedAt: Date?) -> String {
+  if let savedAt = savedAt {
+    let locale = Locale.current
+    let dateFormatter = DateFormatter()
+    if Calendar.current.isDateInToday(savedAt) {
+      dateFormatter.dateStyle = .none
+      dateFormatter.timeStyle = .short
+    } else {
+      dateFormatter.dateFormat = "MMM dd"
+    }
+    dateFormatter.locale = locale
+    return dateFormatter.string(from: savedAt)
   }
-
-  public static func make(from item: Models.LibraryItem) -> LibraryItemData {
-    LibraryItemData(
-      id: item.unwrappedID,
-      title: item.unwrappedTitle,
-      pageURLString: item.unwrappedPageURLString,
-      isArchived: item.isArchived,
-      author: item.author,
-      deepLink: item.deepLink,
-      hasLabels: item.hasLabels,
-      noteText: item.noteText,
-      readingProgress: item.readingProgress,
-      wordsCount: item.wordsCount,
-      isPDF: item.isPDF,
-      highlights: item.highlights,
-      sortedLabels: item.sortedLabels,
-      imageURL: item.imageURL,
-      publisherDisplayName: item.publisherDisplayName,
-      descriptionText: item.descriptionText
-    )
-  }
+  return ""
 }
 
 public struct LibraryItemCard: View {
   let viewer: Viewer?
-  var item: LibraryItemData
+  @ObservedObject var item: Models.LibraryItem
   @State var noteLineLimit: Int? = 3
 
-  public init(item: LibraryItemData, viewer: Viewer?) {
+  let savedAtStr: String
+
+  public init(item: Models.LibraryItem, viewer: Viewer?) {
     self.item = item
     self.viewer = viewer
+    self.savedAtStr = savedDateString(item.savedAt)
   }
 
   public var body: some View {
@@ -204,12 +163,19 @@ public struct LibraryItemCard: View {
   var estimatedReadingTime: String {
     if item.wordsCount > 0 {
       let readLen = max(1, item.wordsCount / readingSpeed)
-      return "\(readLen) MIN READ • "
+      return "\(readLen) MIN READ"
     }
     return ""
   }
 
   var readingProgress: String {
+    if item.readingProgress < 2 {
+      return ""
+    }
+    var readingProgress = item.readingProgress
+    if readingProgress > 95 {
+      readingProgress = 100
+    }
     // If there is no wordsCount don't show progress because it will make no sense
     if item.wordsCount > 0 {
       return "\(String(format: "%d", Int(item.readingProgress)))%"
@@ -225,18 +191,15 @@ public struct LibraryItemCard: View {
     item.wordsCount > 0 || item.highlights?.first { ($0 as? Highlight)?.annotation != nil } != nil
   }
 
-  var highlightsText: String {
+  var highlightsStr: String {
     if let highlights = item.highlights, highlights.count > 0 {
       let fmted = LocalText.pluralizedText(key: "number_of_highlights", count: highlights.count)
-      if item.wordsCount > 0 || item.isPDF {
-        return " • \(fmted)"
-      }
       return fmted
     }
     return ""
   }
 
-  var notesText: String {
+  var notesStr: String {
     let notes = item.highlights?.filter { item in
       if let highlight = item as? Highlight {
         return !(highlight.annotation ?? "").isEmpty
@@ -246,9 +209,6 @@ public struct LibraryItemCard: View {
 
     if let notes = notes, notes.count > 0 {
       let fmted = LocalText.pluralizedText(key: "number_of_notes", count: notes.count)
-      if hasMultipleInfoItems {
-        return " • \(fmted)"
-      }
       return fmted
     }
     return ""
@@ -272,30 +232,66 @@ public struct LibraryItemCard: View {
     }
   }
 
+  var savedAtText: Text? {
+    if !savedAtStr.isEmpty {
+      return Text(savedAtStr)
+        .font(.footnote)
+        .foregroundColor(Color.themeLibraryItemSubtle)
+    }
+    return nil
+  }
+
+  var estimatedReadingTimeText: Text? {
+    if !estimatedReadingTime.isEmpty {
+      return Text("\(estimatedReadingTime)")
+        .font(.footnote)
+        .foregroundColor(Color.themeLibraryItemSubtle)
+
+    }
+    return nil
+  }
+
+  var readingProgressText: Text? {
+    if !readingProgress.isEmpty {
+      return Text("\(readingProgress)")
+      .font(.footnote)
+      .foregroundColor(isPartiallyRead ? Color.appGreenSuccess : Color.themeLibraryItemSubtle)
+    }
+    return nil
+  }
+
+  var highlightsText: Text? {
+    if !highlightsStr.isEmpty {
+      return Text("\(highlightsStr)")
+        .font(.footnote)
+        .foregroundColor(Color.themeLibraryItemSubtle)
+    }
+    return nil
+  }
+
+  var notesText: Text? {
+    if !notesStr.isEmpty {
+      return Text("\(notesStr)")
+        .font(.footnote)
+        .foregroundColor(Color.themeLibraryItemSubtle)
+    }
+    return nil
+  }
+
   var readInfo: some View {
     HStack(alignment: .center, spacing: 5.0) {
       ForEach(flairLabels, id: \.self) {
         $0.icon
       }
 
-      Text("\(estimatedReadingTime)")
-        .font(.caption2).fontWeight(.medium)
-        .foregroundColor(Color.themeLibraryItemSubtle)
+      let texts = [savedAtText, estimatedReadingTimeText, readingProgressText, highlightsText, notesText]
+        .compactMap { $0 }
 
-        +
-        Text("\(readingProgress)")
-        .font(.caption2).fontWeight(.medium)
-        .foregroundColor(isPartiallyRead ? Color.appGreenSuccess : Color.themeLibraryItemSubtle)
-
-        +
-        Text("\(highlightsText)")
-        .font(.caption2).fontWeight(.medium)
-        .foregroundColor(Color.themeLibraryItemSubtle)
-
-        +
-        Text("\(notesText)")
-        .font(.caption2).fontWeight(.medium)
-        .foregroundColor(Color.themeLibraryItemSubtle)
+      if texts.count > 0 {
+        texts.dropLast().reduce(Text("")) { result, text in
+          result + text + Text(" • ").font(.footnote).foregroundColor(Color.themeLibraryItemSubtle)
+        } + texts.last!
+      }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
   }
@@ -344,13 +340,13 @@ public struct LibraryItemCard: View {
   var byLine: some View {
     if let origin = cardSiteName(item.pageURLString) {
       Text(bylineStr + " | " + origin)
-        .font(.caption2)
+        .font(.footnote)
         .foregroundColor(Color.themeLibraryItemSubtle)
         .frame(maxWidth: .infinity, alignment: .leading)
         .lineLimit(1)
     } else {
       Text(bylineStr)
-        .font(.caption2)
+        .font(.footnote)
         .foregroundColor(Color.themeLibraryItemSubtle)
         .frame(maxWidth: .infinity, alignment: .leading)
         .lineLimit(1)
@@ -358,11 +354,11 @@ public struct LibraryItemCard: View {
   }
 
   public var articleInfo: some View {
-    VStack(alignment: .leading, spacing: 5) {
+    VStack(alignment: .leading, spacing: 7) {
       readInfo
         .dynamicTypeSize(.xSmall ... .medium)
 
-      Text(item.title)
+      Text(item.title ?? "")
         .font(.body).fontWeight(.semibold)
         .lineSpacing(1.25)
         .foregroundColor(.appGrayTextContrast)

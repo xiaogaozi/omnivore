@@ -1,4 +1,3 @@
-import { DropdownMenu } from '@radix-ui/react-dropdown-menu'
 import { SETTINGS_SECTION_1, SETTINGS_SECTION_2 } from './SettingsMenu'
 import {
   Dropdown,
@@ -6,7 +5,7 @@ import {
   DropdownSeparator,
 } from '../../elements/DropdownElements'
 import { useRouter } from 'next/router'
-import { List } from 'phosphor-react'
+import { List } from '@phosphor-icons/react'
 
 export const SettingsDropdown = (): JSX.Element => {
   const router = useRouter()
