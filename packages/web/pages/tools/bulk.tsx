@@ -19,6 +19,7 @@ import {
   BorderedFormInput,
   FormLabel,
 } from '../../components/elements/FormElements'
+import { DEFAULT_HOME_PATH } from '../../lib/navigations'
 
 type RunningState = 'none' | 'confirming' | 'running' | 'completed'
 
@@ -33,7 +34,7 @@ export default function BulkPerformer(): JSX.Element {
   const [errorMessage, setErrorMessage] = useState<string | undefined>()
   const [runningState, setRunningState] = useState<RunningState>('none')
 
-  const { itemsPages, isValidating } = useGetLibraryItemsQuery({
+  const { itemsPages, isValidating } = useGetLibraryItemsQuery('', {
     searchQuery: query,
     limit: 1,
     sortDescending: false,
@@ -202,7 +203,7 @@ export default function BulkPerformer(): JSX.Element {
             <VStack css={{ width: '100%' }} alignment="center">
               <Button
                 onClick={(e) => {
-                  window.location.href = '/home'
+                  window.location.href = DEFAULT_HOME_PATH
                   e.preventDefault()
                 }}
                 style="ctaDarkYellow"

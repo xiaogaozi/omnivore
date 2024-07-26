@@ -3,24 +3,21 @@ import express from 'express'
 import { RuleEventType } from './entity/rule'
 import { env } from './env'
 import { ReportType } from './generated/graphql'
-import { Merge } from './util'
 import {
-  enqueueExportItem,
+  enqueueGeneratePreviewContentJob,
+  enqueueProcessYouTubeVideo,
+  enqueueScoreJob,
+  enqueueThumbnailJob,
   enqueueTriggerRuleJob,
-  enqueueWebhookJob,
 } from './utils/createTask'
-import { deepDelete } from './utils/helpers'
-import { buildLogger } from './utils/logger'
+import { logger } from './utils/logger'
+import { isYouTubeVideoURL } from './utils/youtube'
 
-const logger = buildLogger('pubsub')
+export type EntityEvent = { id: string }
 
 const client = new PubSub()
 
-type EntityData<T> = Merge<T, { libraryItemId: string }>
-
 export const createPubSubClient = (): PubsubClient => {
-  const fieldsToDelete = ['user'] as const
-
   const publish = (topicName: string, msg: Buffer): Promise<void> => {
     if (env.dev.isLocal) {
       logger.info(`Publishing ${topicName}: ${msg.toString()}`)
@@ -50,90 +47,98 @@ export const createPubSubClient = (): PubsubClient => {
         Buffer.from(JSON.stringify({ userId, email, name, username }))
       )
     },
-    entityCreated: async <T>(
+    entityCreated: async <T extends EntityEvent>(
       type: EntityType,
-      data: EntityData<T>,
+      data: T,
       userId: string
     ): Promise<void> => {
-      const libraryItemId = data.libraryItemId
       // queue trigger rule job
-      if (type === EntityType.PAGE) {
-        await enqueueTriggerRuleJob({
-          userId,
-          ruleEventType: RuleEventType.PageCreated,
-          libraryItemId,
-        })
-      }
-      // queue export item job
-      await enqueueExportItem({
-        userId,
-        libraryItemIds: [libraryItemId],
-      })
-
-      const cleanData = deepDelete(
-        data as EntityData<T> & Record<typeof fieldsToDelete[number], unknown>,
-        [...fieldsToDelete]
-      )
-
-      await enqueueWebhookJob({
-        userId,
-        type,
-        action: 'created',
+      await enqueueTriggerRuleJob({
+        ruleEventType: `${type.toUpperCase()}_CREATED` as RuleEventType,
         data,
+        userId,
       })
 
-      return publish(
-        'entityCreated',
-        Buffer.from(JSON.stringify({ type, userId, ...cleanData }))
-      )
+      if (type === EntityType.ITEM) {
+        // if (await findGrantedFeatureByName(FeatureName.AISummaries, userId)) {
+        // await enqueueAISummarizeJob({
+        //   userId,
+        //   libraryItemId,
+        // })
+        // }
+
+        const isItemWithURL = (data: any): data is { originalUrl: string } => {
+          return 'originalUrl' in data
+        }
+
+        if (isItemWithURL(data) && isYouTubeVideoURL(data['originalUrl'])) {
+          await enqueueProcessYouTubeVideo({
+            userId,
+            libraryItemId: data.id,
+          })
+        }
+
+        await enqueueScoreJob({
+          userId,
+          libraryItemId: data.id,
+        })
+
+        const hasThumbnail = (
+          data: any
+        ): data is { thumbnail: string | null } => {
+          return 'thumbnail' in data
+        }
+
+        // we don't want to create thumbnail for imported pages and pages that already have thumbnail
+        if (!hasThumbnail(data) || !data.thumbnail) {
+          try {
+            // create a task to update thumbnail and pre-cache all images
+            const job = await enqueueThumbnailJob(userId, data.id)
+            logger.info('Thumbnail job created', { id: job?.id })
+          } catch (e) {
+            logger.error('Failed to enqueue thumbnail job', e)
+          }
+        }
+
+        const hasPreviewContent = (
+          data: any
+        ): data is { previewContent: string | null } => {
+          return 'previewContent' in data
+        }
+
+        // generate preview content if it is less than 180 characters
+        if (
+          !hasPreviewContent(data) ||
+          (data.previewContent && data.previewContent.length < 180)
+        ) {
+          try {
+            const job = await enqueueGeneratePreviewContentJob(data.id, userId)
+            logger.info('Generate preview job created', { id: job?.id })
+          } catch (e) {
+            logger.error('Failed to enqueue generate preview job', e)
+          }
+        }
+      }
     },
-    entityUpdated: async <T>(
+    entityUpdated: async <T extends EntityEvent>(
       type: EntityType,
-      data: EntityData<T>,
+      data: T,
       userId: string
     ): Promise<void> => {
-      const libraryItemId = data.libraryItemId
-
       // queue trigger rule job
-      if (type === EntityType.PAGE) {
-        await enqueueTriggerRuleJob({
-          userId,
-          ruleEventType: RuleEventType.PageUpdated,
-          libraryItemId,
-        })
-      }
-      // queue export item job
-      await enqueueExportItem({
+      await enqueueTriggerRuleJob({
         userId,
-        libraryItemIds: [libraryItemId],
-      })
-
-      const cleanData = deepDelete(
-        data as EntityData<T> & Record<typeof fieldsToDelete[number], unknown>,
-        [...fieldsToDelete]
-      )
-
-      await enqueueWebhookJob({
-        userId,
-        type,
-        action: 'updated',
+        ruleEventType: `${type.toUpperCase()}_UPDATED` as RuleEventType,
         data,
       })
-
-      return publish(
-        'entityUpdated',
-        Buffer.from(JSON.stringify({ type, userId, ...cleanData }))
-      )
     },
-    entityDeleted: (
+    entityDeleted: async (
       type: EntityType,
       id: string,
       userId: string
     ): Promise<void> => {
-      return publish(
-        'entityDeleted',
-        Buffer.from(JSON.stringify({ type, id, userId }))
-      )
+      logger.info(`entityDeleted: ${type} ${id} ${userId}`)
+      await Promise.resolve()
     },
     reportSubmitted: (
       submitterId: string,
@@ -152,9 +157,10 @@ export const createPubSubClient = (): PubsubClient => {
 }
 
 export enum EntityType {
-  PAGE = 'page',
-  HIGHLIGHT = 'highlight',
-  LABEL = 'label',
+  ITEM = 'PAGE',
+  HIGHLIGHT = 'HIGHLIGHT',
+  LABEL = 'LABEL',
+  RSS_FEED = 'FEED',
 }
 
 export interface PubsubClient {
@@ -164,14 +170,14 @@ export interface PubsubClient {
     name: string,
     username: string
   ) => Promise<void>
-  entityCreated: <T>(
+  entityCreated: <T extends EntityEvent>(
     type: EntityType,
-    data: EntityData<T>,
+    data: T,
     userId: string
   ) => Promise<void>
-  entityUpdated: <T>(
+  entityUpdated: <T extends EntityEvent>(
     type: EntityType,
-    data: EntityData<T>,
+    data: T,
     userId: string
   ) => Promise<void>
   entityDeleted: (type: EntityType, id: string, userId: string) => Promise<void>

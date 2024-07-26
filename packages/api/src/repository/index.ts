@@ -3,21 +3,47 @@ import { DatabaseError } from 'pg'
 import {
   EntityManager,
   EntityTarget,
+  ObjectLiteral,
   QueryBuilder,
   QueryFailedError,
+  ReplicationMode,
   Repository,
 } from 'typeorm'
 import { appDataSource } from '../data_source'
 import { Claims } from '../resolvers/types'
 import { SetClaimsRole } from '../utils/dictionary'
 
-export const getColumns = <T>(repository: Repository<T>): (keyof T)[] => {
+export enum SortOrder {
+  ASCENDING = 'ASC',
+  DESCENDING = 'DESC',
+}
+
+export interface Sort {
+  by: string
+  order?: SortOrder
+  nulls?: 'NULLS FIRST' | 'NULLS LAST'
+}
+
+export interface Select {
+  column: string
+  alias?: string
+}
+
+export const paramtersToObject = (parameters: ObjectLiteral[]) => {
+  return parameters.reduce((a, b) => ({ ...a, ...b }), {})
+}
+
+export const getColumns = <T extends ObjectLiteral>(
+  repository: Repository<T>
+): (keyof T)[] => {
   return repository.metadata.columns.map(
     (col) => col.propertyName
   ) as (keyof T)[]
 }
 
-export const getColumnsDbName = <T>(repository: Repository<T>): string[] => {
+export const getColumnsDbName = <T extends ObjectLiteral>(
+  repository: Repository<T>
+): string[] => {
   return repository.metadata.columns.map((col) => col.databaseName)
 }
 
@@ -34,30 +60,64 @@ export const setClaims = async (
   ])
 }
 
+interface AuthTrxOptions {
+  uid?: string
+  userRole?: string
+  replicationMode?: 'primary' | 'replica'
+}
+
 export const authTrx = async <T>(
   fn: (manager: EntityManager) => Promise<T>,
-  em = appDataSource.manager,
-  uid?: string,
-  userRole?: string
+  options: AuthTrxOptions = {}
 ): Promise<T> => {
-  // if uid and dbRole are not passed in, then get them from the claims
+  let { uid, userRole } = options
+
+  // if uid and dbRole are not passed in, then get them from the http context
   if (!uid && !userRole) {
     const claims: Claims | undefined = httpContext.get('claims')
     uid = claims?.uid
     userRole = claims?.userRole
   }
 
-  return em.transaction(async (tx) => {
-    await setClaims(tx, uid, userRole)
-    return fn(tx)
-  })
+  const replicationModes: Record<'primary' | 'replica', ReplicationMode> = {
+    primary: 'master',
+    replica: 'slave',
+  }
+
+  const replicationMode = options.replicationMode
+    ? replicationModes[options.replicationMode]
+    : undefined
+
+  const queryRunner = appDataSource.createQueryRunner(replicationMode)
+
+  // lets now open a new transaction:
+  await queryRunner.startTransaction()
+
+  try {
+    await setClaims(queryRunner.manager, uid, userRole)
+    const result = await fn(queryRunner.manager)
+
+    await queryRunner.commitTransaction()
+
+    return result
+  } catch (err) {
+    await queryRunner.rollbackTransaction()
+
+    throw err
+  } finally {
+    await queryRunner.release()
+  }
 }
 
-export const getRepository = <T>(entity: EntityTarget<T>) => {
+export const getRepository = <T extends ObjectLiteral>(
+  entity: EntityTarget<T>
+) => {
   return appDataSource.getRepository(entity)
 }
 
-export const queryBuilderToRawSql = <T>(q: QueryBuilder<T>): string => {
+export const queryBuilderToRawSql = <T extends ObjectLiteral>(
+  q: QueryBuilder<T>
+): string => {
   const queryAndParams = q.getQueryAndParameters()
   let sql = queryAndParams[0]
   const params = queryAndParams[1]

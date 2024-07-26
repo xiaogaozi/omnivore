@@ -26,7 +26,7 @@ import {
   autoUpdate,
 } from '@floating-ui/react'
 import { CardMenu } from '../CardMenu'
-import { DotsThree } from 'phosphor-react'
+import { DotsThree } from '@phosphor-icons/react'
 import { isTouchScreenDevice } from '../../../lib/deviceType'
 import { LoadingBarOverlay, ProgressBarOverlay } from './LibraryListCard'
 import { GridFallbackImage } from './FallbackImage'
@@ -64,18 +64,23 @@ export function LibraryGridCard(props: LinkedItemCardProps): JSX.Element {
       css={{
         pl: '0px',
         padding: '0px',
-        width: '293px',
+        width: '100%',
+        maxWidth: '400px',
         height: '100%',
         minHeight: '270px',
-        background: 'white',
         borderRadius: '5px',
         borderWidth: '1px',
         borderStyle: 'none',
         overflow: 'hidden',
         cursor: 'pointer',
+        border: props.legacyLayout
+          ? 'unset'
+          : '1px solid $thLeftMenuBackground',
         '@media (max-width: 930px)': {
-          m: '15px',
           width: 'calc(100% - 30px)',
+        },
+        '@mdDown': {
+          width: '100%',
         },
       }}
       alignment="start"
@@ -91,6 +96,7 @@ export function LibraryGridCard(props: LinkedItemCardProps): JSX.Element {
           props.setIsChecked(props.item.id, !props.isChecked)
           return
         }
+        window.localStorage.setItem('nav-return', router.asPath)
         if (event.metaKey || event.ctrlKey) {
           window.open(
             `/${props.viewer.profile.username}/${props.item.slug}`,
@@ -101,7 +107,7 @@ export function LibraryGridCard(props: LinkedItemCardProps): JSX.Element {
         }
       }}
     >
-      {!isTouchScreenDevice() && (
+      {!isTouchScreenDevice() && props.multiSelectMode == 'off' && (
         <Box
           ref={refs.setFloating}
           style={{ ...floatingStyles, zIndex: 3 }}
@@ -211,7 +217,7 @@ const LibraryGridCardContent = (props: LinkedItemCardProps): JSX.Element => {
             position: 'absolute',
             top: 0,
             left: 0,
-            m: '10px',
+            m: '12px',
             lineHeight: '1',
           }}
         >

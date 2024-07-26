@@ -4,7 +4,7 @@ import { LibraryItemNode } from '../../../lib/networking/queries/useGetLibraryIt
 import { LinkedItemCardAction } from './CardTypes'
 import { Button } from '../../elements/Button'
 import { theme } from '../../tokens/stitches.config'
-import { DotsThree, Share } from 'phosphor-react'
+import { DotsThree } from '@phosphor-icons/react'
 import { CardMenu } from '../CardMenu'
 import { UserBasicData } from '../../../lib/networking/queries/useGetViewerQuery'
 import { ArchiveIcon } from '../../elements/icons/ArchiveIcon'
@@ -12,6 +12,8 @@ import { NotebookIcon } from '../../elements/icons/NotebookIcon'
 import { TrashIcon } from '../../elements/icons/TrashIcon'
 import { LabelIcon } from '../../elements/icons/LabelIcon'
 import { UnarchiveIcon } from '../../elements/icons/UnarchiveIcon'
+import { BrowserIcon } from '../../elements/icons/BrowserIcon'
+import { MoveToInboxIcon } from '../../elements/icons/MoveToInboxIcon'
 
 type LibraryHoverActionsProps = {
   viewer: UserBasicData
@@ -31,7 +33,7 @@ export const LibraryHoverActions = (props: LibraryHoverActionsProps) => {
         overflow: 'clip',
 
         height: '33px',
-        width: '184px',
+        width: '200px',
         bg: '$thBackground',
         display: 'flex',
 
@@ -48,6 +50,9 @@ export const LibraryHoverActions = (props: LibraryHoverActionsProps) => {
           boxShadow:
             '0 1px 3px 0 rgba(0, 0, 0, 0.1),0 1px 2px 0 rgba(0, 0, 0, 0.06);',
         },
+      }}
+      onClick={(event) => {
+        event.stopPropagation()
       }}
     >
       <Button
@@ -67,28 +72,45 @@ export const LibraryHoverActions = (props: LibraryHoverActionsProps) => {
           color={theme.colors.thNotebookSubtle.toString()}
         />
       </Button>
-      <Button
-        title={props.item.isArchived ? 'Unarchive (e)' : 'Archive (e)'}
-        style="hoverActionIcon"
-        onClick={(event) => {
-          const action = props.item.isArchived ? 'unarchive' : 'archive'
-          props.handleAction(action)
-          event.preventDefault()
-          event.stopPropagation()
-        }}
-      >
-        {props.item.isArchived ? (
-          <UnarchiveIcon
+      {props.item.folder == 'following' ? (
+        <Button
+          title="Move to library"
+          style="hoverActionIcon"
+          onClick={async (event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            props.handleAction('move-to-inbox')
+          }}
+        >
+          <MoveToInboxIcon
             size={21}
             color={theme.colors.thNotebookSubtle.toString()}
           />
-        ) : (
-          <ArchiveIcon
-            size={21}
-            color={theme.colors.thNotebookSubtle.toString()}
-          />
-        )}
-      </Button>
+        </Button>
+      ) : (
+        <Button
+          title={props.item.isArchived ? 'Unarchive (e)' : 'Archive (e)'}
+          style="hoverActionIcon"
+          onClick={(event) => {
+            const action = props.item.isArchived ? 'unarchive' : 'archive'
+            props.handleAction(action)
+            event.preventDefault()
+            event.stopPropagation()
+          }}
+        >
+          {props.item.isArchived ? (
+            <UnarchiveIcon
+              size={21}
+              color={theme.colors.thNotebookSubtle.toString()}
+            />
+          ) : (
+            <ArchiveIcon
+              size={21}
+              color={theme.colors.thNotebookSubtle.toString()}
+            />
+          )}
+        </Button>
+      )}
       <Button
         title="Remove (#)"
         style="hoverActionIcon"
@@ -120,7 +142,10 @@ export const LibraryHoverActions = (props: LibraryHoverActionsProps) => {
           event.stopPropagation()
         }}
       >
-        <Share size={21} color={theme.colors.thNotebookSubtle.toString()} />
+        <BrowserIcon
+          size={21}
+          color={theme.colors.thNotebookSubtle.toString()}
+        />
       </Button>
       <CardMenu
         item={props.item}

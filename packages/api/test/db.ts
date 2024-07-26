@@ -120,7 +120,13 @@ export const createTestLibraryItem = async (
     slug: 'test-with-omnivore',
   }
 
-  const createdItem = await createOrUpdateLibraryItem(item, userId)
+  const createdItem = await createOrUpdateLibraryItem(
+    item,
+    userId,
+    undefined,
+    true,
+    true
+  )
   if (labels) {
     await saveLabelsInLibraryItem(labels, createdItem.id, userId)
   }
@@ -152,8 +158,9 @@ export const saveLabelsInLibraryItem = async (
         }))
       )
     },
-    undefined,
-    userId
+    {
+      uid: userId,
+    }
   )
 
   // update labels in library item
@@ -178,8 +185,9 @@ export const createHighlight = async (
         },
       })
     },
-    undefined,
-    userId
+    {
+      uid: userId,
+    }
   )
 
   const job = await enqueueUpdateHighlight({

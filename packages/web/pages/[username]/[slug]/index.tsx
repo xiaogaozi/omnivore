@@ -89,9 +89,14 @@ export default function Home(): JSX.Element {
     //     return
     //   }
     // }
+    const navReturn = window.localStorage.getItem('nav-return')
+    if (navReturn) {
+      router.push(navReturn)
+      return
+    }
+
     const query = window.sessionStorage.getItem('q')
     router.push(`/home?${query}`)
-    // router.push(`/home`)
   }, [router, viewerData, article])
 
   const goPreviousOrHome = useCallback(() => {
@@ -277,7 +282,7 @@ export default function Home(): JSX.Element {
           showErrorToast('Error deleting page', { position: 'bottom-right' })
         }
       })
-      router.push(`/home`)
+      goNextOrHome()
     }
   }, [article, cache, mutate, router])
 
@@ -298,6 +303,11 @@ export default function Home(): JSX.Element {
         name: 'Return to library',
         shortcut: ['u'],
         perform: () => {
+          const navReturn = window.localStorage.getItem('nav-return')
+          if (navReturn) {
+            router.push(navReturn)
+            return
+          }
           const query = window.sessionStorage.getItem('q')
           if (query) {
             router.push(`/home?${query}`)
@@ -345,7 +355,7 @@ export default function Home(): JSX.Element {
         id: 'mark_read',
         section: 'Article',
         name: 'Mark current item as read',
-        shortcut: ['m', 'r'],
+        shortcut: ['-'],
         perform: () => {
           document.dispatchEvent(new Event('mark-read'))
         },
@@ -565,6 +575,9 @@ export default function Home(): JSX.Element {
               highContrastText={readerSettings.highContrastText ?? undefined}
               highlightOnRelease={
                 readerSettings.highlightOnRelease ?? undefined
+              }
+              textDirection={
+                article.directionality ?? readerSettings.textDirection
               }
               articleMutations={{
                 createHighlightMutation,

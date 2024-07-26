@@ -7,7 +7,7 @@ import { wordsCount } from '../utils/helpers'
 const convertToLibraryItem = (item: DeepPartial<LibraryItem>) => {
   return {
     ...item,
-    wordCount: item.wordCount ?? wordsCount(item.readableContent || ''),
+    wordCount: item.wordCount ?? wordsCount(item.readableContent || '', true),
   }
 }
 
@@ -25,7 +25,7 @@ export const libraryItemRepository = appDataSource
         .andWhere('md5(original_url) = md5(:url)', { url })
 
       if (forUpdate) {
-        qb.setLock('pessimistic_write')
+        qb.setLock('pessimistic_read')
       }
 
       return qb.getOne()
@@ -58,6 +58,8 @@ export const libraryItemRepository = appDataSource
     },
 
     createByPopularRead(name: string, userId: string) {
+      // set read_at to now and reading_progress_bottom_percent to 2
+      // so the items show up in continue reading section
       return this.query(
         `
         INSERT INTO omnivore.library_item (
@@ -73,7 +75,9 @@ export const libraryItemRepository = appDataSource
           published_at,
           site_name,
           user_id,
-          word_count
+          word_count,
+          read_at,
+          reading_progress_bottom_percent
         ) 
         SELECT
           slug,
@@ -88,7 +92,9 @@ export const libraryItemRepository = appDataSource
           published_at,
           site_name,
           $2,
-          word_count
+          word_count,
+          NOW(),
+          2
         FROM
           omnivore.popular_read
         WHERE

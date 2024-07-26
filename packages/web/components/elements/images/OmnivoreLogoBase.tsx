@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { useRouter } from 'next/router'
+import { DEFAULT_HOME_PATH } from '../../../lib/navigations'
 export type OmnivoreLogoBaseProps = {
   color?: string
   href?: string
@@ -21,10 +22,16 @@ export function OmnivoreLogoBase(props: OmnivoreLogoBaseProps): JSX.Element {
         alignItems: 'center',
       }}
       onClick={(event) => {
+        const navReturn = window.localStorage.getItem('nav-return')
+        if (navReturn) {
+          window.location.assign(navReturn)
+          return
+        }
         const query = window.sessionStorage.getItem('q')
         if (query) {
-          router.push(`/home?${query}`)
-          event.preventDefault()
+          window.location.assign(`${DEFAULT_HOME_PATH}?${query}`)
+        } else {
+          window.location.replace(DEFAULT_HOME_PATH)
         }
       }}
       tabIndex={-1}

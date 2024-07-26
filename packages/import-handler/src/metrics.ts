@@ -1,3 +1,4 @@
+import { RedisDataSource } from '@omnivore/utils'
 import Redis from 'ioredis'
 import { sendImportCompletedEmail } from '.'
 
@@ -105,7 +106,7 @@ export const updateMetrics = async (
     )
 
     // if the task is finished, send email
-    if (state == ImportTaskState.FINISHED) {
+    if ((state as ImportTaskState) == ImportTaskState.FINISHED) {
       const metrics = await getMetrics(redisClient, userId, taskId)
       if (metrics) {
         await sendImportCompletedEmail(userId, metrics.imported, metrics.failed)

@@ -22,8 +22,12 @@ export const refreshAllFeeds = async (db: DataSource): Promise<boolean> => {
     refreshID: uuid(),
     startedAt: new Date().toISOString(),
   } as RSSRefreshContext
-  const subscriptionGroups = (await db.createEntityManager().query(
-    `
+  let subscriptionGroups = []
+
+  const slaveQueryRunner = db.createQueryRunner('slave')
+  try {
+    subscriptionGroups = (await slaveQueryRunner.query(
+      `
       SELECT
         url,
         ARRAY_AGG(s.id) AS "subscriptionIds",
@@ -43,10 +47,13 @@ export const refreshAllFeeds = async (db: DataSource): Promise<boolean> => {
         AND (s.scheduled_at <= NOW() OR s.scheduled_at IS NULL)
         AND u.status = $4
       GROUP BY
-        s.url
+        url
       `,
-    ['RSS', 'ACTIVE', 'following', 'ACTIVE']
-  )) as RssSubscriptionGroup[]
+      ['RSS', 'ACTIVE', 'following', 'ACTIVE']
+    )) as RssSubscriptionGroup[]
+  } finally {
+    await slaveQueryRunner.release()
+  }
 
   logger.info(`rss: checking ${subscriptionGroups.length}`, {
     refreshContext,
@@ -76,7 +83,10 @@ const updateSubscriptionGroup = async (
   refreshContext: RSSRefreshContext
 ) => {
   let feedURL = group.url
-  const userList = JSON.stringify(group.userIds.sort())
+  const userIds = group.userIds
+  // sort the user ids so that the job id is consistent
+  // [...userIds] creates a shallow copy, so sort() does not mutate the original
+  const userList = JSON.stringify([...userIds].sort())
   if (!feedURL) {
     logger.error('no url for feed group', group)
     return
@@ -105,7 +115,7 @@ const updateSubscriptionGroup = async (
     scheduledTimestamps: group.scheduledDates.map((timestamp) =>
       timestamp.getTime()
     ), // unix timestamp in milliseconds
-    userIds: group.userIds,
+    userIds,
     fetchContentTypes: group.fetchContentTypes,
     folders: group.folders,
   }

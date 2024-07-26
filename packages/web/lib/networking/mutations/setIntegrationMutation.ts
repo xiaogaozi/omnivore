@@ -16,15 +16,24 @@ export type SetIntegrationInput = {
   token: string
   enabled: boolean
   importItemState?: ImportItemState
+  settings?: any
 }
 
 type SetIntegrationResult = {
-  setIntegration?: SetIntegrationData
+  setIntegration: SetIntegrationData
+}
+
+export enum SetIntegrationErrorCode {
+  AlreadyExists = 'ALREADY_EXISTS',
+  BadRequest = 'BAD_REQUEST',
+  InvalidToken = 'INVALID_TOKEN',
+  NotFound = 'NOT_FOUND',
+  Unauthorized = 'UNAUTHORIZED',
 }
 
 type SetIntegrationData = {
   integration: Integration
-  errorCodes?: unknown[]
+  errorCodes?: SetIntegrationErrorCode[]
 }
 
 type Integration = {
@@ -39,7 +48,7 @@ type Integration = {
 
 export async function setIntegrationMutation(
   input: SetIntegrationInput
-): Promise<Integration | undefined> {
+): Promise<Integration> {
   const mutation = gql`
     mutation SetIntegration($input: SetIntegrationInput!) {
       setIntegration(input: $input) {
@@ -52,6 +61,7 @@ export async function setIntegrationMutation(
             enabled
             createdAt
             updatedAt
+            settings
           }
         }
         ... on SetIntegrationError {
@@ -62,11 +72,10 @@ export async function setIntegrationMutation(
   `
 
   const data = (await gqlFetcher(mutation, { input })) as SetIntegrationResult
-  const output = data as any
-  const error = data.setIntegration?.errorCodes?.find(() => true)
+  const error = data.setIntegration.errorCodes?.find(() => true)
   if (error) {
-    if (error === 'INVALID_TOKEN') throw 'Your token is invalid.'
-    throw error
+    throw new Error(error)
   }
-  return output.setIntegration?.integration
+
+  return data.setIntegration.integration
 }
