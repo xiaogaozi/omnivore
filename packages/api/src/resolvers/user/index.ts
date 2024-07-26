@@ -188,11 +188,11 @@ export const validateUsernameResolver: ResolverFn<
   return !user
 }
 
-export const googleSignupResolver: ResolverFn<
-  Merge<GoogleSignupResult, { me?: UserEntity }>,
-  Record<string, unknown>,
-  ResolverContext,
-  MutationGoogleSignupArgs
+// export const googleSignupResolver: ResolverFn<
+//   Merge<GoogleSignupResult, { me?: UserEntity }>,
+//   Record<string, unknown>,
+//   ResolverContext,
+//   MutationGoogleSignupArgs
 // > = async (_obj, { input }, { setAuth, log }) => {
 //   const { email, username, name, bio, sourceUserId, pictureUrl, secret } = input
 //   const lowerCasedUsername = username.toLowerCase()
