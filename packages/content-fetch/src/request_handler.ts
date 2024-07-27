@@ -275,9 +275,9 @@ export const contentFetchRequestHandler: RequestHandler = async (req, res) => {
 
     const savedDate = savedAt ? new Date(savedAt) : new Date()
     const { finalUrl, title, content, contentType } = fetchResult
-    if (content) {
-      await uploadOriginalContent(users, content, savedDate.getTime())
-    }
+    // if (content) {
+    //   await uploadOriginalContent(users, content, savedDate.getTime())
+    // }
 
     const savePageJobs = users.map((user) => ({
       userId: user.id,
