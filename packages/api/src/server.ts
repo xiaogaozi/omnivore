@@ -119,9 +119,9 @@ export const createApp = (): Express => {
   app.use('/svc/email-attachment', emailAttachmentRouter())
   app.use('/svc/following', followingServiceRouter())
 
-  if (env.dev.isLocal) {
-    app.use('/local/debug', localDebugRouter())
-  }
+  // if (env.dev.isLocal) {
+  //   app.use('/local/debug', localDebugRouter())
+  // }
 
   app.get('/api/debug-sentry', () => {
     throw new Error('Sentry TEST error!')
