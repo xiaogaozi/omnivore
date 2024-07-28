@@ -6,7 +6,7 @@ FROM ubuntu:bionic
 
 WORKDIR /app
 
-RUN apt update && apt install -y ca-certificates
+RUN apt update && apt install -y ca-certificates curl
 
 COPY --from=build /app/imageproxy .
 
@@ -17,4 +17,3 @@ COPY start_imageproxy.sh .
 ENTRYPOINT ["/app/start_imageproxy.sh"]
 
 EXPOSE 8080
-
